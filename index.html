@@ -1,201 +1,570 @@
 
+
+
 <!DOCTYPE html>
+
 <html lang="ro">
+
 <head>
+
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sports AI Analyzer 0.2</title>
+
+<title>Sports AI Analyzer v0.3</title>
+
 <style>
+
 *{box-sizing:border-box}
-body{margin:0;padding:18px;background:#0b1020;color:#eef2ff;font-family:Arial,sans-serif}
-header{text-align:center;padding:20px}
-h1{color:#54e0bd}
-.card{background:#151e33;border:1px solid #293752;border-radius:14px;padding:16px;margin:14px 0}
-select,button{width:100%;padding:13px;border-radius:9px;margin-top:10px;font-size:16px}
-select{background:#263550;color:white}
-button{background:#39d6b0;color:#07151a;font-weight:bold;border:0}
-.small{font-size:12px;color:#aab5cc}
-.match{padding:13px 0;border-bottom:1px solid #34415a}
-.value{color:#54e0bd;font-weight:bold}
+
+body{margin:0;background:#0b1020;color:#eef2ff;font-family:Arial,sans-serif;padding:18px}
+
+main{max-width:950px;margin:auto}
+
+header{padding:22px 0}
+
+h1{font-size:27px;margin:0 0 8px;color:#60e6b0}
+
+p{color:#aab5cf;line-height:1.5}
+
+.panel{background:#151e33;border:1px solid #293753;border-radius:14px;padding:17px;margin:14px 0}
+
+label{display:block;color:#aab5cf;margin:13px 0 7px}
+
+select,button{width:100%;padding:13px;border-radius:9px;border:1px solid #40516f;background:#0e172a;color:white;font-size:15px}
+
+button{background:#10a878;border:0;font-weight:bold;margin-top:15px;cursor:pointer}
+
+button:disabled{opacity:.5}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
+
+.stat{background:#0e172a;border:1px solid #293753;padding:13px;border-radius:10px}
+
+.stat b{display:block;color:#60e6b0;font-size:22px;margin-top:7px}
+
+.small{font-size:12px;color:#93a2bd}
+
+h2{font-size:18px}
+
+table{width:100%;border-collapse:collapse}
+
+td,th{text-align:left;padding:10px;border-bottom:1px solid #293753;font-size:13px}
+
+.status{color:#60e6b0}
+
+.warning{color:#f5c46a}
+
+footer{font-size:12px;color:#8794ae;padding:20px 0}
+
 </style>
+
 </head>
+
 <body>
+
+<main>
+
 <header>
+
+<div class="small">SPORTS INTELLIGENCE PLATFORM · v0.3</div>
+
 <h1>SPORTS AI ANALYZER</h1>
-<p>Versiunea 0.2 | Football Analytics</p>
+
+<p>Analiză statistică pentru meciuri de fotbal, probabilități și piețe avansate.</p>
+
 </header>
 
-<div class="card">
-<h3>Alege competiția</h3>
-<select id="league"><option>Se încarcă...</option></select>
-<button onclick="loadLeague()">Încarcă meciurile</button>
-<p id="status" class="small">Conectare la baza de date...</p>
+<section class="panel">
+
+<h2>1. Selectează competiția</h2>
+
+<label>Campionat</label>
+
+<select id="league"><option value="">Se încarcă...</option></select>
+
+<label>Meci</label>
+
+<select id="match"><option value="">Alege un meci</option></select>
+
+<button id="analyze">ANALIZEAZĂ MECIUL</button>
+
+<p id="status" class="small">Se conectează la baza de date...</p>
+
+</section>
+
+<section id="output" hidden>
+
+<div class="panel">
+
+<h2 id="fixtureTitle">Analiza meciului</h2>
+
+<p id="sampleInfo"></p>
+
+<div class="grid" id="overview"></div>
+
 </div>
 
-<div class="card">
-<h3>Meciuri disponibile</h3>
-<div id="matches">Se încarcă...</div>
+<div class="panel">
+
+<h2>2. Piețe statistice</h2>
+
+<div style="overflow-x:auto">
+
+<table>
+
+<thead><tr><th>Piață</th><th>Medie estimată</th><th>Probabilitate</th><th>Date</th></tr></thead>
+
+<tbody id="markets"></tbody>
+
+</table>
+
 </div>
 
-<div class="card">
-<h3>Analiza meciului</h3>
-<div id="analysis">Selectează un meci.</div>
 </div>
+
+<div class="panel">
+
+<h2>3. Statistici echipe</h2>
+
+<div class="grid" id="teamStats"></div>
+
+</div>
+
+<div class="panel">
+
+<h2>4. Analiza golurilor</h2>
+
+<div class="grid" id="goals"></div>
+
+</div>
+
+</section>
+
+<footer>
+
+Date: Open Matchday, actualizate de furnizor. Estimările sunt statistice, nu predicții garantate. Piețele fără suficiente date nu primesc probabilități.
+
+</footer>
+
+</main>
 
 <script>
+
 const API="https://api.github.com/repos/oladeeayo/open-matchday/contents/data";
-let competitions=[],results=[],fixtures=[];
 
-function parseCSV(t){
- const lines=t.trim().split(/\r?\n/);
- if(lines.length<2)return [];
- const headers=lines[0].split(",").map(x=>x.replace(/"/g,"").trim());
- return lines.slice(1).map(line=>{
-  const vals=line.split(",");
-  let obj={};
-  headers.forEach((h,i)=>obj[h]=(vals[i]||"").replace(/"/g,"").trim());
-  return obj;
- });
-}
-function get(o,names){
- for(const n of names){
-  const k=Object.keys(o).find(x=>x.toLowerCase()===n.toLowerCase());
-  if(k&&o[k]!=="")return o[k];
+const RAW="https://raw.githubusercontent.com/oladeeayo/open-matchday/master/";
+
+const SEASON="2627";
+
+let leagues=[];
+
+let results=[];
+
+let fixtures=[];
+
+const $=id=>document.getElementById(id);
+
+function csvParse(text){
+
+ const rows=[];
+
+ let row=[],cell="",quoted=false;
+
+ for(let i=0;i<text.length;i++){
+
+  const c=text[i];
+
+  if(c==='"'){
+
+   if(quoted&&text[i+1]==='"'){cell+='"';i++}
+
+   else quoted=!quoted;
+
+  }else if(c===','&&!quoted){row.push(cell);cell=""}
+
+  else if((c==='\n'||c==='\r')&&!quoted){
+
+   if(c==='\r'&&text[i+1]==='\n')i++;
+
+   row.push(cell);
+
+   if(row.some(x=>x!==""))rows.push(row);
+
+   row=[];cell="";
+
+  }else cell+=c;
+
  }
- return "";
+
+ if(cell||row.length){row.push(cell);rows.push(row)}
+
+ if(!rows.length)return [];
+
+ const headers=rows.shift();
+
+ return rows.map(r=>{
+
+  const o={};
+
+  headers.forEach((h,i)=>o[h]=(r[i]??"").trim());
+
+  return o;
+
+ });
+
 }
-function match(o){
- const home=get(o,["HomeTeam","Home","Home Team","home_team"]);
- const away=get(o,["AwayTeam","Away","Away Team","away_team"]);
- if(!home||!away)return null;
- return {
-  home,away,
-  date:get(o,["Date","MatchDate"]),
-  hg:get(o,["FTHG","HomeGoals","HG"]),
-  ag:get(o,["FTAG","AwayGoals","AG"])
- };
+
+async function getText(url){
+
+ const r=await fetch(url);
+
+ if(!r.ok)throw Error("Nu am putut încărca datele ("+r.status+")");
+
+ return r.text();
+
 }
+
+function humanName(folder){
+
+ return folder.replace(/^[A-Z]+_\d+_/,"")
+
+ .replace(/-/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+
+}
+
 async function init(){
- try{
-  let r=await fetch(API);
-  if(!r.ok)throw Error();
-  competitions=(await r.json()).filter(x=>x.type==="dir");
-  let s=document.getElementById("league");
-  s.innerHTML="";
-  competitions.forEach((c,i)=>{
-   let op=document.createElement("option");
-   op.value=i;
-   op.textContent=c.name.replaceAll("_"," ");
-   s.appendChild(op);
-  });
-  document.getElementById("status").textContent=competitions.length+" competiții găsite.";
- }catch(e){
-  document.getElementById("status").textContent="Conexiunea nu a reușit. Reîncarcă pagina.";
- }
-}
-async function loadLeague(){
- const c=competitions[document.getElementById("league").value];
- if(!c)return;
- document.getElementById("status").textContent="Se descarcă datele...";
- document.getElementById("matches").textContent="Se încarcă...";
- results=[];fixtures=[];
- try{
-  const files=await fetch(API+"/"+c.name).then(r=>r.json());
-  const rf=files.find(x=>/results.*2627.*csv/i.test(x.name));
-  const ff=files.find(x=>/fixtures.*2627.*csv/i.test(x.name));
-  if(rf){
-   const t=await fetch(rf.download_url).then(r=>r.text());
-   results=parseCSV(t).map(match).filter(x=>x&&x.hg!==""&&x.ag!=="");
-  }
-  if(ff){
-   const t=await fetch(ff.download_url).then(r=>r.text());
-   fixtures=parseCSV(t).map(match).filter(Boolean);
-  }
-  showMatches();
-  document.getElementById("status").textContent=
-   results.length+" rezultate și "+fixtures.length+" meciuri găsite.";
- }catch(e){
-  document.getElementById("status").textContent="Nu s-au putut încărca datele.";
- }
-}
-function showMatches(){
- const el=document.getElementById("matches");
- el.innerHTML="";
- if(!fixtures.length){
-  el.textContent="Nu există meciuri disponibile în fișier.";
-  return;
- }
- fixtures.slice(0,40).forEach(m=>{
-  const d=document.createElement("div");
-  d.className="match";
-  const title=document.createElement("b");
-  title.textContent=m.home+" - "+m.away;
-  const date=document.createElement("p");
-  date.className="small";
-  date.textContent=m.date||"Data indisponibilă";
-  const b=document.createElement("button");
-  b.textContent="Analizează";
-  b.onclick=()=>analyze(m);
-  d.append(title,date,b);
-  el.appendChild(d);
- });
-}
-function stats(team){
- const games=results.filter(m=>m.home===team||m.away===team).slice(-10);
- let scored=0,conceded=0,n=0;
- games.forEach(m=>{
-  let h=Number(m.hg),a=Number(m.ag);
-  if(!Number.isFinite(h)||!Number.isFinite(a))return;
-  if(m.home===team){scored+=h;conceded+=a;}
-  else{scored+=a;conceded+=h;}
-  n++;
- });
- return n?{attack:scored/n,defence:conceded/n,n}:
- {attack:1.3,defence:1.3,n:0};
-}
-function fact(n){
- let x=1;
- for(let i=2;i<=n;i++)x*=i;
- return x;
-}
-function poisson(l,k){
- return Math.exp(-l)*Math.pow(l,k)/fact(k);
-}
-function analyze(m){
- const h=stats(m.home),a=stats(m.away);
- const lh=(h.attack+a.defence)/2;
- const la=(a.attack+h.defence)/2;
- let one=0,x=0,two=0,over=0,gg=0;
- for(let i=0;i<=8;i++){
-  for(let j=0;j<=8;j++){
-   let p=poisson(lh,i)*poisson(la,j);
-   if(i>j)one+=p;
-   else if(i===j)x+=p;
-   else two+=p;
-   if(i+j>=3)over+=p;
-   if(i>0&&j>0)gg+=p;
-  }
- }
- const pct=n=>(n*100).toFixed(1)+"%";
- const odd=n=>(n>0?(1/n).toFixed(2):"-");
- document.getElementById("analysis").innerHTML=`
- <h3>${m.home} - ${m.away}</h3>
- <p class="small">Model statistic simplificat</p>
- Goluri estimate: <b class="value">${lh.toFixed(2)} - ${la.toFixed(2)}</b><br><br>
- <b>1X2</b><br>
- 1: <span class="value">${pct(one)}</span> | Cotă teoretică ${odd(one)}<br>
- X: <span class="value">${pct(x)}</span> | Cotă teoretică ${odd(x)}<br>
- 2: <span class="value">${pct(two)}</span> | Cotă teoretică ${odd(two)}<br><br>
- <b>Goluri</b><br>
- Peste 2.5: <span class="value">${pct(over)}</span><br>
- Sub 2.5: <span class="value">${pct(1-over)}</span><br><br>
- <b>GG / NG</b><br>
- GG: <span class="value">${pct(gg)}</span><br>
- NG: <span class="value">${pct(1-gg)}</span><br><br>
- <p class="small">Istoric folosit: ${h.n} meciuri gazde și ${a.n} meciuri oaspeți. Estimările pot fi imprecise, mai ales când lipsesc date.</p>`;
-}
-init();
-</script>
-</body>
-</html>
 
+ try{
+
+  $("status").textContent="Se încarcă lista competițiilor...";
+
+  const r=await fetch(API);
+
+  if(!r.ok)throw Error("Nu pot accesa lista competițiilor");
+
+  const data=await r.json();
+
+  leagues=data.filter(x=>x.type==="dir");
+
+  const sel=$("league");
+
+  sel.innerHTML='<option value="">Alege competiția</option>';
+
+  leagues.forEach(l=>{
+
+   const o=document.createElement("option");
+
+   o.value=l.path;
+
+   o.textContent=humanName(l.name);
+
+   sel.appendChild(o);
+
+  });
+
+  $("status").textContent="Conectat. Alege competiția.";
+
+ }catch(e){
+
+  $("status").textContent="Eroare: "+e.message+". Reîncarcă pagina.";
+
+ }
+
+}
+
+async function loadLeague(){
+
+ const folder=$("league").value;
+
+ $("match").innerHTML='<option value="">Se încarcă meciurile...</option>';
+
+ results=[];fixtures=[];
+
+ if(!folder)return;
+
+ try{
+
+  const base=RAW+folder+"/";
+
+  const [a,b]=await Promise.all([
+
+   getText(base+"results_"+SEASON+".csv"),
+
+   getText(base+"fixtures_"+SEASON+".csv")
+
+  ]);
+
+  results=csvParse(a);
+
+  fixtures=csvParse(b);
+
+  const sel=$("match");
+
+  sel.innerHTML='<option value="">Alege meciul</option>';
+
+  fixtures.forEach((m,i)=>{
+
+   const o=document.createElement("option");
+
+   o.value=i;
+
+   o.textContent=(m.date||"Data necunoscută")+" · "+m.home+" - "+m.away;
+
+   sel.appendChild(o);
+
+  });
+
+  $("status").textContent=fixtures.length+" meciuri viitoare · "+results.length+" rezultate istorice încărcate.";
+
+ }catch(e){
+
+  $("match").innerHTML='<option value="">Nu s-au putut încărca meciurile</option>';
+
+  $("status").textContent="Eroare la date: "+e.message;
+
+ }
+
+}
+
+function num(v){
+
+ if(v===undefined||v===null||v==="")return null;
+
+ const n=Number(v);
+
+ return Number.isFinite(n)?n:null;
+
+}
+
+function teamHistory(team){
+
+ return results.filter(r=>r.home===team||r.away===team)
+
+ .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
+
+ .slice(0,10);
+
+}
+
+function teamMetric(history,team,metric){
+
+ const vals=[];
+
+ history.forEach(r=>{
+
+  const side=r.home===team?"home":"away";
+
+  const v=num(r[side+"_"+metric]);
+
+  if(v!==null)vals.push(v);
+
+ });
+
+ return {avg:vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null,n:vals.length};
+
+}
+
+function poissonOver(lambda,line){
+
+ if(lambda===null||!Number.isFinite(lambda))return null;
+
+ let p=0,term=Math.exp(-lambda);
+
+ for(let k=0;k<line;k++){
+
+  if(k>0)term*=lambda/k;
+
+  p+=term;
+
+ }
+
+ return Math.max(0,Math.min(1,1-p));
+
+}
+
+function pct(v){
+
+ return v===null?"N/D":(v*100).toFixed(1)+"%";
+
+}
+
+function avg(v){
+
+ return v===null?"N/D":v.toFixed(2);
+
+}
+
+function renderCard(label,value){
+
+ return `<div class="stat"><span class="small">${label}</span><b>${value}</b></div>`;
+
+}
+
+function analyze(){
+
+ const index=$("match").value;
+
+ if(index===""){alert("Alege un meci.");return}
+
+ const m=fixtures[Number(index)];
+
+ const home=m.home,away=m.away;
+
+ const hh=teamHistory(home),ah=teamHistory(away);
+
+ const metrics=[
+
+  ["corners","Cornere totale","home_corners","away_corners"],
+
+  ["yellow","Cartonașe galbene","home_yellow","away_yellow"],
+
+  ["red","Cartonașe roșii","home_red","away_red"],
+
+  ["fouls","Faulturi","home_fouls","away_fouls"],
+
+  ["shots","Șuturi totale","home_shots","away_shots"],
+
+  ["target","Șuturi pe poartă","home_target","away_target"]
+
+ ];
+
+ const homeData={},awayData={};
+
+ metrics.forEach(x=>{
+
+  homeData[x[0]]=teamMetric(hh,home,x[0]);
+
+  awayData[x[0]]=teamMetric(ah,away,x[0]);
+
+ });
+
+ $("output").hidden=false;
+
+ $("fixtureTitle").textContent=home+" - "+away;
+
+ $("sampleInfo").textContent="Analiză pe ultimele 10 meciuri disponibile pentru fiecare echipă. Datele statistice lipsă sunt excluse, nu considerate zero.";
+
+ $("overview").innerHTML=
+
+ renderCard("Meciuri analizate",hh.length+" / "+ah.length)+
+
+ renderCard("Competiție",humanName($("league").value))+
+
+ renderCard("Data",m.date||"N/D");
+
+ let marketHTML="";
+
+ metrics.forEach(x=>{
+
+  const h=homeData[x[0]],a=awayData[x[0]];
+
+  const count=h.n+a.n;
+
+  const lambda=(h.avg!==null&&a.avg!==null)?h.avg+a.avg:null;
+
+  const prob=lambda!==null?poissonOver(lambda,Number($("threshold")?.value||9)):null;
+
+  const threshold=x[0]==="corners"?9:
+
+   x[0]==="yellow"?3:
+
+   x[0]==="red"?0:
+
+   x[0]==="fouls"?21:
+
+   x[0]==="shots"?21:7;
+
+  const over= lambda!==null?poissonOver(lambda,threshold):null;
+
+  const under=over!==null?1-over:null;
+
+  const enough=count>=5;
+
+  marketHTML+=`<tr>
+
+   <td><b>${x[1]}</b><br><span class="small">Over/Under ${threshold}.5</span></td>
+
+   <td>${avg(lambda)}</td>
+
+   <td>${enough?pct(over):"Date insuficiente"}<br><span class="small">Under: ${enough?pct(under):"N/D"}</span></td>
+
+   <td>${count} observații</td>
+
+  </tr>`;
+
+ });
+
+ $("markets").innerHTML=marketHTML;
+
+ let teamHTML="";
+
+ metrics.forEach(x=>{
+
+  teamHTML+=renderCard(x[1],home+": "+avg(homeData[x[0]].avg))+
+
+  renderCard(x[1],away+": "+avg(awayData[x[0]].avg));
+
+ });
+
+ $("teamStats").innerHTML=teamHTML;
+
+ const gh=teamMetric(hh,home,"ft_home");
+
+ const ga=teamMetric(ah,away,"ft_away");
+
+ const homeGoals=teamGoalAverage(hh,home);
+
+ const awayGoals=teamGoalAverage(ah,away);
+
+ $("goals").innerHTML=
+
+ renderCard("Goluri medii "+home,avg(homeGoals))+
+
+ renderCard("Goluri medii "+away,avg(awayGoals))+
+
+ renderCard("Total goluri estimat",avg(homeGoals!==null&&awayGoals!==null?homeGoals+awayGoals:null))+
+
+ renderCard("GG estimat",ggProbability(home,away,hh,ah));
+
+ window.scrollTo({top:$("output").offsetTop-10,behavior:"smooth"});
+
+}
+
+function teamGoalAverage(history,team){
+
+ const vals=history.map(r=>{
+
+  const side=r.home===team?"home":"away";
+
+  return num(r["ft_"+side]);
+
+ }).filter(v=>v!==null);
+
+ return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+
+}
+
+function ggProbability(home,away,hh,ah){
+
+ const h=teamGoalAverage(hh,home),a=teamGoalAverage(ah,away);
+
+ if(h===null||a===null)return "N/D";
+
+ const ph=1-Math.exp(-h),pa=1-Math.exp(-a);
+
+ return pct(ph*pa);
+
+}
+
+$("league").addEventListener("change",loadLeague);
+
+$("analyze").addEventListener("click",analyze);
+
+init();
+
+</script>
+
+</body>
+
+</html>
